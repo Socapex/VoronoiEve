@@ -195,10 +195,9 @@ void EveCrest::get_item_names_and_prices()
 
 void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_data)
 {
-	EveCrestCache::write_solar_system_cache(out_data);
-	EveCrestCache::solar_system_cache_is_good();
-
-	return;
+	if (EveCrestCache::read_solar_system_cache(out_data)) {
+		return;
+	}
 
 	if (!_is_ready) {
 		std::cout << "Eve Crest is not ready." << std::endl;
@@ -234,6 +233,7 @@ void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_d
 	})
 
 	.then([this](std::shared_ptr<std::vector<SolarSystem>> out_data) {
+		int qty = 0;
 		for (auto& x : *out_data) {
 			get_values(x.url)
 			.then([&x](pplx::task<json::value> rawData) {
@@ -254,15 +254,19 @@ void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_d
 							<< e.what() << std::endl;
 				}
 			}).wait();
+			qty++;
+			if (qty > 10)
+				break;
 		}
 		return out_data;
 	})
 
 	.then([](std::shared_ptr<std::vector<SolarSystem>> out_data) {
-		std::cout << "DONE" << std::endl;
 //		for (const auto& x : *out_data) {
 //			std::cout << x;
 //		}
+		EveCrestCache::write_solar_system_cache(out_data);
+		std::cout << "Done downloading fresh data." << std::endl;
 	});
 }
 
