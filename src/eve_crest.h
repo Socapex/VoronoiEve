@@ -23,20 +23,22 @@
 #include <cpprest/uri.h>
 
 struct SolarSystem {
-	unsigned int id;
-	std::string id_str;
-	std::string url;
-	std::string name;
-	std::string alliance;
-	std::string security_class;
-	double x, y, z;
+	unsigned int id = 0;
+	char url[256] = "";
+	char name[256] = "";
+	char alliance[256] = "";
+	char security_class[256] = "";
+	double security_status = 0;
+	double x = 0;
+	double y = 0;
+	double z = 0;
 
 	friend std::ostream& operator <<(std::ostream& os, const SolarSystem& ss)
 	{
 		os << ss.name << std::endl
-				<< "  " << ss.id << " (" << ss.id_str << ")" << std::endl
-				<< "  " << ss.alliance << std::endl
-				<< "  " << ss.security_class << std::endl
+				<< "  " << ss.id << std::endl;
+		os << "  " << ss.alliance << std::endl;
+		os << "  " << ss.security_class << std::endl
 				<< "  " << "Position " << std::endl
 				<< "    " << ss.x << std::endl
 				<< "    " << ss.y << std::endl
@@ -61,5 +63,6 @@ private:
 	/* Members */
 	std::map<std::string, std::string> _uri_map;
 	std::atomic<bool> _is_ready{false};
+	web::http::client::http_client client;
 
 };

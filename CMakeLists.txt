@@ -18,7 +18,7 @@ set(CMAKE_CXX_STANDARD 14)
 add_executable(VoronoiEve ${SOURCES})
 
 # Library includes
-
+message(${CMAKE_CXX_FLAGS_RELEASE})
 
 # Add all required system libraries.
 # set(PROJECT_LINK_LIBS curses)

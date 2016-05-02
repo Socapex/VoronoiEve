@@ -11,7 +11,7 @@ namespace EveCrestCache {
 
 	template <typename T>
 	void load_data(std::ifstream& ifs,
-			std::shared_ptr<std::vector<T>>& data) {
+			std::shared_ptr<std::vector<T>> data) {
 
 		std::size_t vec_size;
 		ifs.read(reinterpret_cast<char*>(&vec_size), sizeof(vec_size));
@@ -19,10 +19,10 @@ namespace EveCrestCache {
 		data->resize(vec_size);
 		ifs.read(reinterpret_cast<char*>(&(*data)[0]), vec_size * sizeof(T));
 
-		for (const auto& x : *data) {
-			std::cout << x;
-		}
-		std::cout << "Loaded cached data." << std::endl;
+//		for (const auto& x : *data) {
+//			std::cout << x;
+//		}
+		std::cout << "Loaded " << vec_size << " cached SolarSystems." << std::endl;
 	}
 
 
@@ -61,6 +61,7 @@ namespace EveCrestCache {
 			return false;
 		}
 
+		std::cout << "Found valid cache, loading from file." << std::endl;
 		load_data<SolarSystem>(ifs, data);
 		ifs.close();
 		return true;
@@ -73,7 +74,7 @@ namespace EveCrestCache {
 		if (!ofs.is_open())
 			return;
 
-		auto const expiration = (std::chrono::system_clock::now() + 12h);
+		auto const expiration = (std::chrono::system_clock::now() + 720h);
 		auto const cache_time = expiration.time_since_epoch().count();
 
 		ofs.write(reinterpret_cast<char const*>(&cache_time), sizeof(cache_time));

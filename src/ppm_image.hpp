@@ -5,6 +5,9 @@
 #include <vector>
 
 struct Pixel {
+	Pixel()
+	{}
+
 	Pixel(int red, int green, int blue)
 	{
 		rgba = 0xff << 24 | blue << 16 | green << 8 | red;
@@ -47,6 +50,10 @@ struct PPMImage {
 			}
 			pixmap.emplace_back(line);
 		}
+	}
+
+	void set_pixel(Pixel pix, unsigned int x, unsigned int y) {
+		pixmap[y][x] = pix;
 	}
 
 	friend std::ostream& operator <<(std::ostream& os, const PPMImage& image)

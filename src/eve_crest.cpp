@@ -6,6 +6,8 @@
 //  Copyright (c) 2015 Philippe Groarke All rights reserved.
 //
 
+#include <cstring>
+
 #include "eve_crest.h"
 #include "eve_crest_caches.h"
 
@@ -19,6 +21,7 @@ const uri eveMainUri = U("https://crest-tq.eveonline.com");
 const std::string eveSendContentType = "application/vnd.ccp.eve.Api-v3+json";
 
 EveCrest::EveCrest()
+	: client(eveMainUri)
 {
 	init();
 //	getAllAveragePrices();
@@ -28,7 +31,7 @@ EveCrest::EveCrest()
 
 bool EveCrest::is_ready() const
 {
-	return _is_ready;
+	return _is_ready.load();
 }
 
 /***********/
@@ -37,7 +40,6 @@ bool EveCrest::is_ready() const
 
 pplx::task<json::value> EveCrest::get_values(const web::uri& address)
 {
-	http_client client(eveMainUri); // Will send the request.
 
 	// Build custom JSON request as per
 	// https://developers.eveonline.com/resource/crest
@@ -195,15 +197,16 @@ void EveCrest::get_item_names_and_prices()
 
 void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_data)
 {
-	if (EveCrestCache::read_solar_system_cache(out_data)) {
-		return;
-	}
-
 	if (!_is_ready) {
 		std::cout << "Eve Crest is not ready." << std::endl;
 		return;
 	}
 
+	if (EveCrestCache::read_solar_system_cache(out_data)) {
+		return;
+	}
+
+	this->_is_ready.store(false);
 	get_values(_uri_map["systems"])
 	.then([out_data](pplx::task<json::value> rawData)
 	{
@@ -219,9 +222,13 @@ void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_d
 
 				SolarSystem ss;
 				ss.id = obj[U("id")].as_integer();
-				ss.id_str = obj[U("id_str")].as_string();
-				ss.url = obj[U("href")].as_string();
-				ss.name = obj[U("name")].as_string();
+
+
+				std::string s = obj[U("href")].as_string();
+				strncpy(ss.url, s.c_str(), sizeof(ss.url));
+
+				s = obj[U("name")].as_string();
+				strncpy(ss.name, s.c_str(), sizeof(ss.name));
 
 				out_data->emplace_back(ss);
 			}
@@ -233,40 +240,48 @@ void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_d
 	})
 
 	.then([this](std::shared_ptr<std::vector<SolarSystem>> out_data) {
-		int qty = 0;
 		for (auto& x : *out_data) {
 			get_values(x.url)
 			.then([&x](pplx::task<json::value> rawData) {
 				try {
 					json::object obj = rawData.get().as_object();
 
-					json::object sov = obj[U("sovereignty")].as_object();
-					x.alliance = sov[U("name")].as_string();
-					x.security_class = obj[U("securityClass")].as_string();
+					std::string s;
+					if (obj.find("sovereignty") != obj.end()) {
+						json::object sov = obj[U("sovereignty")].as_object();
+						s = sov[U("name")].as_string();
+						strncpy(x.alliance, s.c_str(), sizeof(x.alliance));
+					}
+
+					s = obj[U("securityClass")].as_string();
+					strncpy(x.security_class, s.c_str(), sizeof(x.security_class));
+
+					x.security_status = obj[U("securityStatus")].as_double();
 					json::object pos = obj[U("position")].as_object();
 					x.y = pos[U("y")].as_double();
 					x.x = pos[U("x")].as_double();
 					x.z = pos[U("z")].as_double();
 
 					std::cout << x;
+
 				} catch (const json::json_exception& e) {
 					std::cout << "Parsing JSON failed - "
 							<< e.what() << std::endl;
+					std::cout << x.name << " : " << x.url << std::endl;
+					std::cout << rawData.get().serialize() << std::endl;
 				}
 			}).wait();
-			qty++;
-			if (qty > 10)
-				break;
 		}
 		return out_data;
 	})
 
-	.then([](std::shared_ptr<std::vector<SolarSystem>> out_data) {
+	.then([this](std::shared_ptr<std::vector<SolarSystem>> out_data) {
 //		for (const auto& x : *out_data) {
 //			std::cout << x;
 //		}
 		EveCrestCache::write_solar_system_cache(out_data);
 		std::cout << "Done downloading fresh data." << std::endl;
+		this->_is_ready.store(true);
 	});
 }
 
