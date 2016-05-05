@@ -22,9 +22,14 @@
 #include <cpprest/json.h>
 #include <cpprest/uri.h>
 
+struct Stargate {
+	unsigned int id = 0;
+	char href[256] = "";
+};
+
 struct SolarSystem {
 	unsigned int id = 0;
-	char url[256] = "";
+	char href[256] = "";
 	char name[256] = "";
 	char alliance[256] = "";
 	char security_class[256] = "";
@@ -33,16 +38,25 @@ struct SolarSystem {
 	double y = 0;
 	double z = 0;
 
+	Stargate stargates[12];
+	int stargates_size = 0;
+
 	friend std::ostream& operator <<(std::ostream& os, const SolarSystem& ss)
 	{
 		os << ss.name << std::endl
-				<< "  " << ss.id << std::endl;
-		os << "  " << ss.alliance << std::endl;
-		os << "  " << ss.security_class << std::endl
+				<< "  " << ss.id << std::endl
+				<< "  " << ss.alliance << std::endl
+				<< "  " << ss.security_class << std::endl
 				<< "  " << "Position " << std::endl
 				<< "    " << ss.x << std::endl
 				<< "    " << ss.y << std::endl
-				<< "    " << ss.z << std::endl << std::endl;
+				<< "    " << ss.z << std::endl
+				<< "  " << "Stargates " << std::endl;
+		for (int i = 0; i < ss.stargates_size; ++i) {
+			os << "    " << ss.stargates[i].href << std::endl;
+		}
+		os << std::endl;
+
 		return os;
 	}
 };

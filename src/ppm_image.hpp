@@ -52,8 +52,12 @@ struct PPMImage {
 		}
 	}
 
-	void set_pixel(Pixel pix, unsigned int x, unsigned int y) {
+	void draw_pixel(Pixel pix, unsigned int x, unsigned int y) {
 		pixmap[y][x] = pix;
+	}
+
+	void draw_circle(unsigned int radius, unsigned int x, unsigned int y) {
+
 	}
 
 	friend std::ostream& operator <<(std::ostream& os, const PPMImage& image)

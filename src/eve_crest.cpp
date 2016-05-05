@@ -17,12 +17,18 @@ using namespace web::http;                  // Common HTTP functionality
 using namespace web::http::client;          // HTTP client features
 using namespace concurrency::streams;       // Asynchronous streams
 
+using namespace std::chrono_literals;
+
 const uri eveMainUri = U("https://crest-tq.eveonline.com");
 const std::string eveSendContentType = "application/vnd.ccp.eve.Api-v3+json";
 
 EveCrest::EveCrest()
-	: client(eveMainUri)
+	: client(eveMainUri) // Unfortunate, but optimal in the long run.
 {
+	//http_client_config client_config;
+	//client_config.set_guarantee_order(true);
+	//client_config.set_timeout(10ms);
+	//client = http_client(eveMainUri, client_config);
 	init();
 //	getAllAveragePrices();
 //	getAllItemNames();
@@ -223,9 +229,8 @@ void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_d
 				SolarSystem ss;
 				ss.id = obj[U("id")].as_integer();
 
-
 				std::string s = obj[U("href")].as_string();
-				strncpy(ss.url, s.c_str(), sizeof(ss.url));
+				strncpy(ss.href, s.c_str(), sizeof(ss.href));
 
 				s = obj[U("name")].as_string();
 				strncpy(ss.name, s.c_str(), sizeof(ss.name));
@@ -241,7 +246,7 @@ void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_d
 
 	.then([this](std::shared_ptr<std::vector<SolarSystem>> out_data) {
 		for (auto& x : *out_data) {
-			get_values(x.url)
+			get_values(x.href)
 			.then([&x](pplx::task<json::value> rawData) {
 				try {
 					json::object obj = rawData.get().as_object();
@@ -262,12 +267,23 @@ void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_d
 					x.x = pos[U("x")].as_double();
 					x.z = pos[U("z")].as_double();
 
-					std::cout << x;
+					json::array stargates = obj[U("stargates")].as_array();
+
+					for (int i = 0; i < stargates.size(); ++i) {
+						Stargate star_g;
+						s = stargates[i][U("href")].as_string();
+						strncpy(star_g.href, s.c_str(), sizeof(star_g.href));
+
+						x.stargates[i] = star_g;
+					}
+					x.stargates_size = stargates.size();
+
+					printf("%s\n", x.name);
 
 				} catch (const json::json_exception& e) {
 					std::cout << "Parsing JSON failed - "
 							<< e.what() << std::endl;
-					std::cout << x.name << " : " << x.url << std::endl;
+					std::cout << x.name << " : " << x.href << std::endl;
 					std::cout << rawData.get().serialize() << std::endl;
 				}
 			}).wait();
