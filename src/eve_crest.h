@@ -66,7 +66,8 @@ public:
 	EveCrest();
 	bool is_ready() const;
 
-	void get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_data);
+	void get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_data,
+			bool k_space_only = true);
 private:
 	void init();
 	pplx::task<web::json::value> get_values(const web::uri& address);

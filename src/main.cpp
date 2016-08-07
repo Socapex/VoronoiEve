@@ -11,13 +11,12 @@
 #include "ppm_image.hpp"
 #include "eve_crest.h"
 
-const int width = 500;
+const int width = 2000;
 //const int height = 2000;
 
 using namespace std::chrono_literals;
 
 struct Point {
-	Pixel pixel;
 	unsigned int x;
 	unsigned int y;
 
@@ -29,8 +28,11 @@ struct Point {
 
 struct VoronoiCell {
 	Point origin;
+	std::vector<Point> other_stars;
+	Pixel color;
 	std::vector<Point> points;
 	std::string alliance;
+	double security;
 
 	friend bool operator<(const VoronoiCell& l, const VoronoiCell& r)
 	{
@@ -136,9 +138,19 @@ struct Palette {
 	std::vector<Pixel> colors;
 };
 
-double distance(double x1, double x2, double y1, double y2)
+double euclid_dist(double x1, double x2, double y1, double y2)
 {
-	return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
+	return pow(x2 - x1, 2) + pow(y2 - y1, 2);
+}
+
+double chebyshev_dist(double x1, double x2, double y1, double y2)
+{
+	return std::max(std::abs(x1 - x2), std::abs(y1 - y2));
+}
+
+double manhattan_dist(double x1, double x2, double y1, double y2)
+{
+	return std::abs(x1 - x2) + std::abs(y1 - y2);
 }
 
 Pixel get_next_color()
@@ -155,6 +167,9 @@ Pixel get_next_color()
 
 
 int main(int argc, char** argv) {
+	std::cout << "VoronoiEve" << std::endl
+			<< "  An Eve Online basic map generator." << std::endl
+			<< "  Philippe Groarke <philippe.groarke@gmail.com>" << std::endl;
 
 	auto systems = std::make_shared<std::vector<SolarSystem>>();
 	EveCrest eve_crest;
@@ -168,7 +183,7 @@ int main(int argc, char** argv) {
 	// Remove worm-holes. TEMPORARY?
 	systems->erase(std::remove_if(systems->begin(), systems->end(),
 		[](const SolarSystem& s) {
-			return s.stargates_size == 0;
+			return s.id > 31000000;
 		}), systems->end());
 
 
@@ -214,11 +229,9 @@ int main(int argc, char** argv) {
 
 	std::vector<VoronoiCell> voronoi_cells;
 
-
 	/* Initialize all origins. */
 	for (const auto& x : *systems) {
 		Point point;
-		point.pixel = Pixel(255, 255, 255);
 		point.x = ((x.x - min_x) * (double)width) / (max_x - min_x);
 		point.y = (((-1 * x.z) - min_z) * (double)(height - 1))
 				/ (max_z - min_z);
@@ -226,7 +239,13 @@ int main(int argc, char** argv) {
 		VoronoiCell cell;
 		cell.origin = point;
 		cell.alliance = x.alliance;
+		cell.security = x.security_status;
 		voronoi_cells.emplace_back(cell);
+	}
+
+	/* Draw all stars, since some wont be rendered later. */
+	for (const auto& x : voronoi_cells) {
+		image.draw_pixel(Pixel(255, 255, 255), x.origin.x, x.origin.y);
 	}
 
 	/* Generate all x,y pairs that we will test. */
@@ -239,13 +258,13 @@ int main(int argc, char** argv) {
 	}
 	std::sort(x_y_pairs.begin(), x_y_pairs.end());
 
-	/* Also vopy the testing cells, since they will be removed. */
+	/* Also copy the testing cells, since they will be removed. */
 	std::vector<VoronoiCell> untested_cells(voronoi_cells);
 	std::sort(untested_cells.begin(), untested_cells.end());
 
 	/* OUCH. Better way to do this? */
 	for (auto& cell_k : voronoi_cells) {
-		Pixel color = get_next_color();
+		cell_k.color = get_next_color();
 		std::vector<std::pair<unsigned int, unsigned int>> used_x_y;
 
 		for (const auto& x_y : x_y_pairs) {
@@ -253,15 +272,41 @@ int main(int argc, char** argv) {
 				continue;
 
 			bool shortest = true;
-			double dist_k = distance(cell_k.origin.x, x_y.first,
+			double dist_k = euclid_dist(cell_k.origin.x, x_y.first,
+					cell_k.origin.y, x_y.second);
+
+			double dist_k_cheby = chebyshev_dist(cell_k.origin.x, x_y.first,
+					cell_k.origin.y, x_y.second);
+
+			double dist_k_manhattan = manhattan_dist(cell_k.origin.x, x_y.first,
 					cell_k.origin.y, x_y.second);
 
 			for (const auto& cell_j : untested_cells) {
-				double dist_j = distance(cell_j.origin.x, x_y.first,
+				if (x_y.first == cell_j.origin.x && x_y.second == cell_j.origin.y) {
+					continue;
+				}
+				double dist_j = euclid_dist(cell_j.origin.x, x_y.first,
 						cell_j.origin.y, x_y.second);
 
 				// Voronoi.
 				if (dist_k > dist_j) {
+					shortest = false;
+					break;
+				}
+
+				// Limit size to x% of map width.
+//				if (dist_k > pow(width * 0.05, 2)) {
+//					shortest = false;
+//					break;
+//				}
+
+				// Chebyshev needs to be lower to merge.
+				if (dist_k_cheby > width * 0.1) {
+					shortest = false;
+					break;
+				}
+
+				if (dist_k_manhattan > width * 0.14) {
 					shortest = false;
 					break;
 				}
@@ -270,7 +315,6 @@ int main(int argc, char** argv) {
 				continue;
 
 			Point p;
-			p.pixel = color;
 			p.x = x_y.first;
 			p.y = x_y.second;
 			cell_k.points.emplace_back(p);
@@ -291,26 +335,55 @@ int main(int argc, char** argv) {
 				<< ". Cells left : " << untested_cells.size() << std::endl;
 	}
 
+	std::sort(voronoi_cells.begin(), voronoi_cells.end());
 
+	voronoi_cells.erase(std::remove_if(voronoi_cells.begin(), voronoi_cells.end(),
+			[](const auto& x) {
+		return x.security > 0 || x.alliance.empty();
+	}), voronoi_cells.end());
 
+	for (int i = 0; i < voronoi_cells.size(); ++i) {
+		if (i + 1 >= voronoi_cells.size())
+			break;
 
+		VoronoiCell& cell = voronoi_cells[i];
+		while (voronoi_cells[i + 1].alliance == cell.alliance) {
+			VoronoiCell& cell2 = voronoi_cells[i + 1];
+			cell.other_stars.push_back(cell2.origin);
+			cell.points.insert(cell.points.end(), cell2.points.begin(),
+					cell2.points.end());
 
-	/* Draw the cells. */
-	for (const auto& x : voronoi_cells) {
-		image.draw_pixel(x.origin.pixel, x.origin.x, x.origin.y);
-		for (const auto& y : x.points) {
-			image.draw_pixel(y.pixel, y.x, y.y);
+			// Bad, bad me :(
+			voronoi_cells.erase(std::remove(voronoi_cells.begin(),
+					voronoi_cells.end(), cell2), voronoi_cells.end());
+
+			if (i + 1 >= voronoi_cells.size())
+				break;
 		}
 	}
 
+	// TEMPORARY. Contested systems are deep red.
+//	auto v_it = std::find_if(voronoi_cells.begin(), voronoi_cells.end(),
+//			[](const auto& x) {
+//		return x.alliance.empty();
+//	});
+//	(*v_it).color = Pixel(146, 20, 12);
 
-//	for (const auto& x : *systems) {
-//		Pixel p(255, 255, 255);
-//		unsigned int x_pos = ((x.x - min_x) * (double)width) / (max_x - min_x);
-//		unsigned int y_pos = (((-1 * x.z) - min_z) * (double)(height - 1))
-//				/ (max_z - min_z);
-//		image.draw_pixel(p, x_pos, y_pos);
-//	}
+	/* Draw the cells. */
+	for (const auto& x : voronoi_cells) {
+		image.draw_pixel(Pixel(255, 255, 255), x.origin.x, x.origin.y);
+		std::cout << x.alliance << std::endl;
+
+		// Stars
+		for (const auto& y : x.other_stars) {
+			image.draw_pixel(Pixel(255, 255, 255), y.x, y.y);
+		}
+
+		// Cells
+		for (const auto& y : x.points) {
+			image.draw_pixel(x.color, y.x, y.y);
+		}
+	}
 
 	image_file << image;
 	image_file.close();

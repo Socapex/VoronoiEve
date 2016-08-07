@@ -201,7 +201,8 @@ void EveCrest::get_item_names_and_prices()
 	}).wait();
 }
 
-void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_data)
+void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_data,
+		bool k_space_only)
 {
 	if (!_is_ready) {
 		std::cout << "Eve Crest is not ready." << std::endl;
@@ -214,11 +215,11 @@ void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_d
 
 	this->_is_ready.store(false);
 	get_values(_uri_map["systems"])
-	.then([out_data](pplx::task<json::value> rawData)
+	.then([out_data, &k_space_only](pplx::task<json::value> rawData)
 	{
 		try {
-			int item_count = rawData.get().as_object()[U("totalCount")].as_integer();
-			out_data->reserve(item_count);
+//			int item_count = rawData.get().as_object()[U("totalCount")].as_integer();
+//			out_data->reserve(item_count);
 
 			json::array itemsArray =
 					rawData.get().as_object()[U("items")].as_array();
@@ -226,8 +227,12 @@ void EveCrest::get_solar_systems(std::shared_ptr<std::vector<SolarSystem>> out_d
 			for (const auto& x : itemsArray) {
 				json::object obj = x.as_object();
 
+				int id = obj[U("id")].as_integer();
+				if (k_space_only && id > 31000000)
+					continue;
+
 				SolarSystem ss;
-				ss.id = obj[U("id")].as_integer();
+				ss.id = id;
 
 				std::string s = obj[U("href")].as_string();
 				strncpy(ss.href, s.c_str(), sizeof(ss.href));
